@@ -1,0 +1,40 @@
+name: Docker cleanup
+
+on:
+  pull_request:
+    types: [closed]
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  cleanup:
+    name: Delete PR image from GHCR
+
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Delete PR image from GHCR
+        run: |
+          PR_TAG="pr-${{ github.event.pull_request.number }}"
+          PACKAGE_NAME="${{ github.event.repository.name }}"
+          OWNER="${{ github.repository_owner }}"
+
+          VERSION_IDS=$(gh api \
+            "users/$OWNER/packages/container/$PACKAGE_NAME/versions" \
+            --jq "[.[] | select(.metadata.container.tags | index(\"$PR_TAG\")) | .id] | .[]" \
+            2>/dev/null || true)
+
+          if [ -z "$VERSION_IDS" ]; then
+            echo "No image versions found for tag $PR_TAG — nothing to delete."
+            exit 0
+          fi
+
+          for VERSION_ID in $VERSION_IDS; do
+            echo "Deleting version $VERSION_ID (tag: $PR_TAG)"
+            gh api --method DELETE \
+              "users/$OWNER/packages/container/$PACKAGE_NAME/versions/$VERSION_ID"
+          done
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
