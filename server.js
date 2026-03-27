@@ -77,7 +77,7 @@ app.post('/import-transactions', async (req, res) => {
     }
 
     const transactions = bankStatement.transactions.map((tx) => ({
-      date: normalizeDate(tx.transaction_date || tx.date),
+      date: normalizeDate(tx.date || tx.transaction_date),
       amount: toActualAmount(tx.amount),
       payee_name: tx.details || tx.subject || 'Unknown',
       imported_payee: tx.details || tx.subject || 'Unknown',
