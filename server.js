@@ -4,6 +4,11 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import crypto from 'node:crypto';
+import util from 'node:util';
+
+// Increase console.log depth so @actual-app/api debug output shows full
+// objects instead of [Object].
+util.inspect.defaultOptions.depth = 8;
 
 const app = express();
 app.use(express.json({ limit: '2mb' }));
