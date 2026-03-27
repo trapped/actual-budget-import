@@ -8,6 +8,10 @@ import crypto from 'node:crypto';
 const app = express();
 app.use(express.json({ limit: '2mb' }));
 
+// @actual-app/api is a global singleton that doesn't support concurrent use.
+// Serialize all import requests so only one runs at a time.
+let importLock = Promise.resolve();
+
 function toActualAmount(amount) {
   return Math.round(Number(amount) * 100);
 }
@@ -33,7 +37,14 @@ app.get('/health', (_req, res) => {
   res.json({ ok: true });
 });
 
-app.post('/import-transactions', async (req, res) => {
+app.post('/import-transactions', (req, res) => {
+  // Chain on the lock so requests run sequentially.
+  importLock = importLock
+    .then(() => handleImport(req, res))
+    .catch(() => {});
+});
+
+async function handleImport(req, res) {
   const tempDataDir = await fs.mkdtemp(path.join(os.tmpdir(), 'actual-import-'));
 
   try {
@@ -116,6 +127,16 @@ app.post('/import-transactions', async (req, res) => {
       await fs.rm(tempDataDir, { recursive: true, force: true });
     } catch {}
   }
+}
+
+// Prevent @actual-app/api internal errors from crashing the process.
+// The bundled API sometimes throws from sync callbacks that escape our
+// try/catch (e.g. during downloadBudget mkdir conflicts).
+process.on('uncaughtException', (err) => {
+  console.error('[uncaughtException]', err.message);
+});
+process.on('unhandledRejection', (err) => {
+  console.error('[unhandledRejection]', err);
 });
 
 const port = process.env.PORT || 3000;
