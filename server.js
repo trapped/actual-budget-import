@@ -92,6 +92,15 @@ async function handleImport(req, res) {
       await api.downloadBudget(syncId);
     }
 
+    // Verify the budget was actually loaded. downloadBudget() can return
+    // normally even when the internal _loadBudget() fails before initialising
+    // the CRDT clock (e.g. a migration error). In that case the next mutating
+    // call — importTransactions — crashes with a cryptic "Cannot read
+    // properties of undefined (reading 'timestamp')" TypeError. Calling
+    // getAccounts() triggers checkFileOpen() and throws a clear
+    // "No budget file is open" error instead, which n8n can retry.
+    await api.getAccounts();
+
     const transactions = bankStatement.transactions.map((tx) => ({
       date: normalizeDate(tx.date || tx.transaction_date),
       amount: toActualAmount(tx.amount),
@@ -107,7 +116,15 @@ async function handleImport(req, res) {
       reimportDeleted: options.reimportDeleted ?? false,
     });
 
-    await api.sync();
+    let syncError = null;
+    try {
+      await api.sync();
+    } catch (err) {
+      // Sync failures are non-fatal: the transactions were already committed to
+      // the local budget. shutdown() will attempt another sync before closing.
+      syncError = err instanceof Error ? err.message : String(err);
+      console.error('[actual-import] sync error (non-fatal):', err);
+    }
 
     return res.json({
       ok: true,
@@ -116,6 +133,7 @@ async function handleImport(req, res) {
       updated: result.updated ?? [],
       errors: result.errors ?? [],
       preview: transactions.slice(0, 5),
+      ...(syncError ? { syncWarning: syncError } : {}),
     });
   } catch (err) {
     return res.status(500).json({
