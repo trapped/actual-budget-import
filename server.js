@@ -122,7 +122,9 @@ async function handleImport(req, res) {
     } catch (err) {
       // Sync failures are non-fatal: the transactions were already committed to
       // the local budget. shutdown() will attempt another sync before closing.
-      syncError = err instanceof Error ? err.message : String(err);
+      syncError = err instanceof Error
+        ? err.message
+        : (err !== null && typeof err === 'object' ? JSON.stringify(err) : String(err));
       console.error('[actual-import] sync error (non-fatal):', err);
     }
 
@@ -136,9 +138,12 @@ async function handleImport(req, res) {
       ...(syncError ? { syncWarning: syncError } : {}),
     });
   } catch (err) {
+    const errorMsg = err instanceof Error
+      ? err.message
+      : (err !== null && typeof err === 'object' ? JSON.stringify(err) : String(err));
     return res.status(500).json({
       ok: false,
-      error: err instanceof Error ? err.message : String(err),
+      error: errorMsg,
       stack: process.env.NODE_ENV === 'production' ? undefined : err?.stack,
     });
   } finally {
