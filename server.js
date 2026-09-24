@@ -102,7 +102,10 @@ async function handleImport(req, res) {
     await api.getAccounts();
 
     const transactions = bankStatement.transactions.map((tx) => ({
-      date: normalizeDate(tx.date || tx.transaction_date),
+      // Prefer the explicit ledger posting date. Legacy parser payloads keep
+      // working through transaction_date/date, but new parsers must expose
+      // operation_date so date semantics do not depend on the bank format.
+      date: normalizeDate(tx.operation_date || tx.transaction_date || tx.date),
       amount: toActualAmount(tx.amount),
       payee_name: tx.details || tx.subject || 'Unknown',
       imported_payee: tx.details || tx.subject || 'Unknown',
