@@ -3,8 +3,8 @@ import * as api from '@actual-app/api';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import crypto from 'node:crypto';
 import util from 'node:util';
+import { makeImportedId, normalizeDate, toActualAmount } from './identity.js';
 
 // Increase console.log depth so @actual-app/api debug output shows full
 // objects instead of [Object].
@@ -16,27 +16,6 @@ app.use(express.json({ limit: '2mb' }));
 // @actual-app/api is a global singleton that doesn't support concurrent use.
 // Serialize all import requests so only one runs at a time.
 let importLock = Promise.resolve();
-
-function toActualAmount(amount) {
-  return Math.round(Number(amount) * 100);
-}
-
-function normalizeDate(dateStr) {
-  return String(dateStr).replaceAll('/', '-');
-}
-
-function makeImportedId(tx, accountId) {
-  const raw = [
-    accountId,
-    tx.date ?? '',
-    tx.transaction_date ?? '',
-    tx.subject ?? '',
-    tx.details ?? '',
-    String(tx.amount ?? ''),
-  ].join('|');
-
-  return crypto.createHash('sha256').update(raw).digest('hex');
-}
 
 app.get('/health', (_req, res) => {
   res.json({ ok: true });
@@ -112,6 +91,13 @@ async function handleImport(req, res) {
       notes: tx.subject || '',
       imported_id: makeImportedId(tx, accountId),
     }));
+
+    const importedIds = transactions.map((tx) => tx.imported_id);
+    if (new Set(importedIds).size !== importedIds.length) {
+      return res.status(422).json({
+        error: 'Statement contains duplicate imported IDs; review source rows before importing',
+      });
+    }
 
     const result = await api.importTransactions(accountId, transactions, {
       defaultCleared: options.defaultCleared ?? true,
