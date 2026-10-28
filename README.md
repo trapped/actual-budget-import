@@ -30,3 +30,7 @@ curl -X POST http://localhost:3000/import-transactions \
 ```bash
 docker run -p 3000:3000 ghcr.io/trapped/actual-budget-import:latest
 ```
+
+## Local project lifecycle
+
+Node 24.14.0 is pinned in `.tool-versions`. `make setup` installs the locked npm dependencies. `make clean` removes reproducible build outputs; `make prune` also removes local `node_modules`. Use `DRY_RUN=1 make clean` or `DRY_RUN=1 make prune` to preview. Saved test results, project data and shared toolchains are retained.
